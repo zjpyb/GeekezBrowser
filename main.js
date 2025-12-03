@@ -416,15 +416,30 @@ function compareVersions(v1, v2) { const p1 = v1.split('.').map(Number); const p
 function downloadFile(url, dest) { return new Promise((resolve, reject) => { const file = fs.createWriteStream(dest); https.get(url, (response) => { if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) { downloadFile(response.headers.location, dest).then(resolve).catch(reject); return; } response.pipe(file); file.on('finish', () => file.close(resolve)); }).on('error', (err) => { fs.unlink(dest, () => { }); reject(err); }); }); }
 function extractZip(zipPath, destDir) {
     return new Promise((resolve, reject) => {
-        try {
-            const AdmZip = require('adm-zip');
-            const zip = new AdmZip(zipPath);
-            zip.extractAllTo(destDir, true);
-            console.log('[Extract Success] Extracted to:', destDir);
-            resolve();
-        } catch (err) {
-            console.error('[Extract Error]', err);
-            reject(err);
+        if (os.platform() === 'win32') {
+            // Windows: 使用 adm-zip（可靠）
+            try {
+                const AdmZip = require('adm-zip');
+                const zip = new AdmZip(zipPath);
+                zip.extractAllTo(destDir, true);
+                console.log('[Extract Success] Extracted to:', destDir);
+                resolve();
+            } catch (err) {
+                console.error('[Extract Error]', err);
+                reject(err);
+            }
+        } else {
+            // macOS/Linux: 使用原生 unzip 命令
+            exec(`unzip -o "${zipPath}" -d "${destDir}"`, (err, stdout, stderr) => {
+                if (err) {
+                    console.error('[Extract Error]', err);
+                    console.error('[Extract stderr]', stderr);
+                    reject(err);
+                } else {
+                    console.log('[Extract Success]', stdout);
+                    resolve();
+                }
+            });
         }
     });
 }
