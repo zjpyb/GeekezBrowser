@@ -289,7 +289,7 @@ async function checkUpdates() {
 
         if (appRes.update) {
             // Found App Update -> Show Confirm
-            showConfirm(`${t('appUpdateFound')} (v${appRes.remote}). ${t('btnSaveUpdate')}?`, () => {
+            showConfirm(`${t('appUpdateFound')} (v${appRes.remote}). ${t('askUpdate')}?`, () => {
                 if (appRes.url) {
                     window.electronAPI.invoke('open-url', appRes.url);
                 }
@@ -326,7 +326,7 @@ async function checkUpdatesSilent() {
             if (btn) btn.classList.add('has-update');
 
             // Auto popup for App update
-            showConfirm(`${t('appUpdateFound')} (v${appRes.remote}). ${t('btnSaveUpdate')}?`, () => {
+            showConfirm(`${t('appUpdateFound')} (v${appRes.remote}). ${t('askUpdate')}?`, () => {
                 if (appRes.url) {
                     window.electronAPI.invoke('open-url', appRes.url);
                 }
