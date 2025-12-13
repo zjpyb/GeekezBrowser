@@ -62,6 +62,28 @@ function getChromiumPath() {
     return findFile(basePath, 'chrome.exe');
 }
 
+// Settings management
+function loadSettings() {
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) {
+            return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Failed to load settings:', e);
+    }
+    return { enableRemoteDebugging: false };
+}
+
+function saveSettings(settings) {
+    try {
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+        return true;
+    } catch (e) {
+        console.error('Failed to save settings:', e);
+        return false;
+    }
+}
+
 function createWindow() {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     const win = new BrowserWindow({
@@ -277,7 +299,7 @@ ipcMain.handle('delete-profile', async (event, id) => {
 
     return true;
 });
-ipcMain.handle('get-settings', async () => { if (fs.existsSync(SETTINGS_FILE)) return fs.readJson(SETTINGS_FILE); return { preProxies: [], mode: 'single', enablePreProxy: false }; });
+ipcMain.handle('get-settings', async () => { if (fs.existsSync(SETTINGS_FILE)) return fs.readJson(SETTINGS_FILE); return { preProxies: [], mode: 'single', enablePreProxy: false, enableRemoteDebugging: false }; });
 ipcMain.handle('save-settings', async (e, settings) => { await fs.writeJson(SETTINGS_FILE, settings); return true; });
 ipcMain.handle('select-extension-folder', async () => {
     const { filePaths } = await dialog.showOpenDialog({
@@ -349,6 +371,15 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
+    // Load settings early for userExtensions and remote debugging
+    const settings = await fs.readJson(SETTINGS_FILE).catch(() => ({
+        enableRemoteDebugging: false,
+        userExtensions: [],
+        preProxies: [],
+        mode: 'single',
+        enablePreProxy: false
+    }));
+
     const profiles = await fs.readJson(PROFILES_FILE);
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) throw new Error('Profile not found');
@@ -356,9 +387,7 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
     if (!profile.fingerprint) profile.fingerprint = generateFingerprint();
     if (!profile.fingerprint.languages) profile.fingerprint.languages = ['en-US', 'en'];
 
-    // Settings
-    let settings = { preProxies: [], mode: 'single', enablePreProxy: false };
-    if (fs.existsSync(SETTINGS_FILE)) try { settings = await fs.readJson(SETTINGS_FILE); } catch (e) { }
+    // Pre-proxy settings (settings already loaded above)
     const override = profile.preProxyOverride || 'default';
     const shouldUsePreProxy = override === 'on' || (override === 'default' && settings.enablePreProxy);
     let finalPreProxyConfig = null;
@@ -446,6 +475,18 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
             '--disk-cache-size=52428800',        // 限制磁盘缓存为 50MB
             '--media-cache-size=52428800'        // 限制媒体缓存为 50MB
         ];
+
+        // 5. Remote Debugging Port (if enabled)
+        if (settings.enableRemoteDebugging && profile.debugPort) {
+            launchArgs.push(`--remote-debugging-port=${profile.debugPort}`);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('⚠️  REMOTE DEBUGGING ENABLED');
+            console.log(`📡 Port: ${profile.debugPort}`);
+            console.log(`🔗 Connect: chrome://inspect or ws://localhost:${profile.debugPort}`);
+            console.log('⚠️  WARNING: May increase automation detection risk!');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        }
+
 
         // 5. 启动浏览器
         const chromePath = getChromiumPath();

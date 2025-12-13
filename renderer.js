@@ -448,6 +448,17 @@ async function openEditModal(id) {
     document.getElementById('editResH').value = fp.screen?.height || 1080;
     document.getElementById('editLanguage').value = fp.language || 'auto';
     document.getElementById('editSeed').value = fp.noiseSeed || 0;
+
+    // Load debug port and show/hide based on global setting
+    const settings = await window.electronAPI.getSettings();
+    const debugPortSection = document.getElementById('debugPortSection');
+    if (settings.enableRemoteDebugging) {
+        debugPortSection.style.display = 'block';
+        document.getElementById('editDebugPort').value = p.debugPort || '';
+    } else {
+        debugPortSection.style.display = 'none';
+    }
+
     document.getElementById('editModal').style.display = 'flex';
 }
 function closeEditModal() { document.getElementById('editModal').style.display = 'none'; currentEditId = null; }
@@ -488,6 +499,14 @@ async function saveEditProfile() {
         }
         p.fingerprint.language = document.getElementById('editLanguage').value;
         p.fingerprint.noiseSeed = parseInt(document.getElementById('editSeed').value);
+
+        // Save debug port if enabled
+        const debugPortInput = document.getElementById('editDebugPort');
+        if (debugPortInput.parentElement.style.display !== 'none') {
+            const portValue = debugPortInput.value.trim();
+            p.debugPort = portValue ? parseInt(portValue) : null;
+        }
+
         console.log('[saveEditProfile] Calling updateProfile...');
         await window.electronAPI.updateProfile(p);
         console.log('[saveEditProfile] Profile updated successfully');
@@ -864,6 +883,7 @@ function openSettings() {
     document.getElementById('settingsModal').style.display = 'flex';
     loadUserExtensions();
     loadWatermarkStyle();
+    loadRemoteDebuggingSetting();
 }
 function closeSettings() {
     document.getElementById('settingsModal').style.display = 'none';
@@ -895,6 +915,22 @@ function saveWatermarkStyle(style) {
     });
     showAlert('水印样式已保存，重启环境后生效');
 }
+
+async function saveRemoteDebuggingSetting(enabled) {
+    const settings = await window.electronAPI.getSettings();
+    settings.enableRemoteDebugging = enabled;
+    await window.electronAPI.saveSettings(settings);
+    showAlert(enabled ? '远程调试已启用，编辑环境时可设置端口' : '远程调试已禁用');
+}
+
+async function loadRemoteDebuggingSetting() {
+    const settings = await window.electronAPI.getSettings();
+    const checkbox = document.getElementById('enableRemoteDebugging');
+    if (checkbox) {
+        checkbox.checked = settings.enableRemoteDebugging || false;
+    }
+}
+
 function switchSettingsTab(tabName) {
     // Update tab buttons
     document.querySelectorAll('#settingsModal .tab-btn').forEach(btn => {

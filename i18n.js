@@ -97,7 +97,22 @@ const enTranslations = {
     settingsExtNoExt: "No extensions loaded",
     settingsExtRemove: "Remove",
     settingsExtAdded: "Extension added successfully!",
-    settingsExtRemoved: "Extension removed!"
+    settingsExtRemoved: "Extension removed!",
+    debugPortLabel: "Remote Debugging Port",
+    debugPortPlaceholder: "Leave empty for auto-assign (e.g., 9222)",
+    debugPortWarning: "⚠️ Enabling debugging port may increase detection risk",
+    debugTitle: "🔧 Remote Debugging",
+    debugDesc: "Enable remote debugging port for external Puppeteer/DevTools connection",
+    debugWarningTitle: "Detection Risk Warning",
+    debugWarningText: "Enabling remote debugging may increase the risk of automation detection by anti-bot systems. Only enable this feature when you need external control via Puppeteer or Chrome DevTools.",
+    debugEnableLabel: "Enable Remote Debugging Port",
+    debugEnableDesc: "When enabled, you can specify a custom debugging port for each profile",
+    watermarkTitle: "🏷️ Watermark Style",
+    watermarkDesc: "Choose watermark display style, takes effect after restarting the profile",
+    watermarkEnhancedLabel: "🎯 Enhanced Watermark (Recommended)",
+    watermarkEnhancedDesc: "Bottom-right corner, gradient background + icon, subtle pulse animation, no page space occupied",
+    watermarkBannerLabel: "🔹 Top Banner",
+    watermarkBannerDesc: "Displayed at page top, very prominent, closable, occupies ~40px space"
 };
 
 // Global i18n Manager

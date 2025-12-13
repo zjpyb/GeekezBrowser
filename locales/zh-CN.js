@@ -99,5 +99,20 @@ window.zhCN = {
     settingsExtNoExt: "暂无扩展",
     settingsExtRemove: "移除",
     settingsExtAdded: "扩展添加成功！",
-    settingsExtRemoved: "扩展已移除！"
+    settingsExtRemoved: "扩展已移除！",
+    debugPortLabel: "远程调试端口",
+    debugPortPlaceholder: "留空自动分配 (如 9222)",
+    debugPortWarning: "⚠️ 启用调试端口可能增加检测风险",
+    debugTitle: "🔧 远程调试",
+    debugDesc: "启用远程调试端口以便外部 Puppeteer/DevTools 连接",
+    debugWarningTitle: "检测风险警告",
+    debugWarningText: "启用远程调试可能会增加被反机器人系统检测为自动化的风险。仅在需要通过 Puppeteer 或 Chrome DevTools 进行外部控制时启用此功能。",
+    debugEnableLabel: "启用远程调试端口",
+    debugEnableDesc: "启用后，您可以为每个环境指定自定义调试端口",
+    watermarkTitle: "🏷️ 环境标识样式",
+    watermarkDesc: "选择环境标识的显示样式，重启环境后生效",
+    watermarkEnhancedLabel: "🎯 增强水印 (推荐)",
+    watermarkEnhancedDesc: "右下角显示，渐变背景 + 图标，轻微脉冲动画，不占用页面空间",
+    watermarkBannerLabel: "🔹 顶部横幅",
+    watermarkBannerDesc: "页面顶部显示，非常醒目，可关闭，占用约40px空间"
 };

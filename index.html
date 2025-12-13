@@ -1177,6 +1177,14 @@
                 </div>
                 <label style="font-size:11px; font-weight:bold; opacity:0.8;">Seed</label>
                 <input type="number" id="editSeed">
+                <!-- Remote Debugging Port (conditional) -->
+                <div id="debugPortSection" style="display:none; margin-top:12px;">
+                    <label style="font-size:11px; font-weight:bold; opacity:0.8;">Remote Debugging Port</label>
+                    <input type="number" id="editDebugPort" placeholder="Leave empty for auto-assign (e.g., 9222)">
+                    <div style="font-size:10px; color:#f39c12; margin-top:4px;">
+                        ⚠️ Enabling debugging port may increase detection risk
+                    </div>
+                </div>
             </div>
             <div class="modal-footer"><button class="outline" onclick="closeEditModal()"
                     data-i18n="cancel">Cancel</button><button onclick="saveEditProfile()" data-i18n="save">Save</button>
@@ -1314,10 +1322,52 @@
                     <h3 style="margin-bottom:15px; color:var(--accent);" data-i18n="settingsAdvTitle">Advanced Settings
                     </h3>
 
+                    <!-- Remote Debugging Section -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;"
+                            data-i18n="debugTitle">🔧 Remote Debugging
+                        </h4>
+                        <p style="font-size:12px; opacity:0.7; margin-bottom:15px;" data-i18n="debugDesc">
+                            Enable remote debugging port for external Puppeteer/DevTools connection
+                        </p>
+
+                        <div
+                            style="background:rgba(239,83,80,0.1); border:1px solid var(--danger); border-radius:6px; padding:12px; margin-bottom:15px;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <span style="font-size:18px;">⚠️</span>
+                                <strong style="color:var(--danger);" data-i18n="debugWarningTitle">Detection Risk
+                                    Warning</strong>
+                            </div>
+                            <p style="font-size:11px; line-height:1.5; margin:0; opacity:0.9;"
+                                data-i18n="debugWarningText">
+                                Enabling remote debugging may increase the risk of automation detection by anti-bot
+                                systems.
+                                Only enable this feature when you need external control via Puppeteer or Chrome
+                                DevTools.
+                            </p>
+                        </div>
+
+                        <label
+                            style="display:flex; align-items:center; gap:10px; padding:12px; border:1px solid var(--border); border-radius:6px; cursor:pointer;">
+                            <input type="checkbox" id="enableRemoteDebugging" style="width:auto; cursor:pointer;"
+                                onchange="saveRemoteDebuggingSetting(this.checked)">
+                            <div style="flex:1;">
+                                <div style="font-weight:bold; margin-bottom:3px; color:var(--text-primary);"
+                                    data-i18n="debugEnableLabel">
+                                    Enable Remote Debugging Port
+                                </div>
+                                <div style="font-size:11px; color:var(--text-secondary);" data-i18n="debugEnableDesc">
+                                    When enabled, you can specify a custom debugging port for each profile
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
                     <!-- Watermark Style Section -->
                     <div style="margin-bottom: 25px;">
-                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;">🏷️ 环境标识样式</h4>
-                        <p style="font-size:12px; opacity:0.7; margin-bottom:15px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;"
+                            data-i18n="watermarkTitle">🏷️ 环境标识样式</h4>
+                        <p style="font-size:12px; opacity:0.7; margin-bottom:15px;" data-i18n="watermarkDesc">
                             选择环境标识的显示样式，重启环境后生效
                         </p>
 
@@ -1331,10 +1381,12 @@
                                     style="margin-top:3px; width:auto; cursor:pointer;"
                                     onchange="saveWatermarkStyle('enhanced')">
                                 <div style="flex:1;">
-                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);">
+                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);"
+                                        data-i18n="watermarkEnhancedLabel">
                                         🎯 增强水印 (推荐)
                                     </div>
-                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">
+                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;"
+                                        data-i18n="watermarkEnhancedDesc">
                                         右下角显示，渐变背景 + 图标，轻微脉冲动画，不占用页面空间
                                     </div>
                                 </div>
@@ -1349,10 +1401,12 @@
                                     style="margin-top:3px; width:auto; cursor:pointer;"
                                     onchange="saveWatermarkStyle('banner')">
                                 <div style="flex:1;">
-                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);">
+                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);"
+                                        data-i18n="watermarkBannerLabel">
                                         🔹 顶部横幅
                                     </div>
-                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">
+                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;"
+                                        data-i18n="watermarkBannerDesc">
                                         页面顶部显示，非常醒目，可关闭，占用约40px空间
                                     </div>
                                 </div>
