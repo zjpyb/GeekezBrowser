@@ -24,16 +24,16 @@ jobs:
       - name: Get latest Xray version
         id: xray_version
         run: |
-          XRAY_VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for macOS ARM64
         run: |
           mkdir -p resources/bin/darwin-arm64
-          curl -L "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-arm64-v8a.zip" -o xray.zip
-          unzip xray.zip -d resources/bin/darwin-arm64/
-          rm xray.zip
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-arm64-v8a.zip"
+          unzip -o xray.zip -d resources/bin/darwin-arm64/
+          rm -f xray.zip
           # Move shared files to common bin directory
           mv resources/bin/darwin-arm64/geoip.dat resources/bin/ 2>/dev/null || true
           mv resources/bin/darwin-arm64/geosite.dat resources/bin/ 2>/dev/null || true
@@ -56,7 +56,7 @@ jobs:
           path: dist/*.dmg
 
   build-mac-x64:
-    runs-on: macos-13  # Intel Mac runner
+    runs-on: macos-15  # Intel Mac runner (updated from deprecated macos-13)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,16 +73,16 @@ jobs:
       - name: Get latest Xray version
         id: xray_version
         run: |
-          XRAY_VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for macOS x64
         run: |
           mkdir -p resources/bin/darwin-x64
-          curl -L "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-64.zip" -o xray.zip
-          unzip xray.zip -d resources/bin/darwin-x64/
-          rm xray.zip
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-64.zip"
+          unzip -o xray.zip -d resources/bin/darwin-x64/
+          rm -f xray.zip
           # Move shared files to common bin directory
           mv resources/bin/darwin-x64/geoip.dat resources/bin/ 2>/dev/null || true
           mv resources/bin/darwin-x64/geosite.dat resources/bin/ 2>/dev/null || true
@@ -121,25 +121,23 @@ jobs:
 
       - name: Get latest Xray version
         id: xray_version
-        shell: powershell
+        shell: bash
         run: |
-          $response = Invoke-RestMethod -Uri "https://api.github.com/repos/XTLS/Xray-core/releases/latest"
-          $version = $response.tag_name
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Latest Xray version: $version"
+          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for Windows
-        shell: powershell
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path resources/bin/win32-x64
-          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-windows-64.zip" -OutFile xray.zip
-          Expand-Archive -Path xray.zip -DestinationPath resources/bin/win32-x64/ -Force
-          Remove-Item xray.zip
+          mkdir -p resources/bin/win32-x64
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-windows-64.zip"
+          unzip -o xray.zip -d resources/bin/win32-x64/
+          rm -f xray.zip
           # Move shared files to common bin directory
-          Move-Item -Path resources/bin/win32-x64/geoip.dat -Destination resources/bin/ -Force -ErrorAction SilentlyContinue
-          Move-Item -Path resources/bin/win32-x64/geosite.dat -Destination resources/bin/ -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path resources/bin/win32-x64/LICENSE -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path resources/bin/win32-x64/README.md -Force -ErrorAction SilentlyContinue
+          mv resources/bin/win32-x64/geoip.dat resources/bin/ 2>/dev/null || true
+          mv resources/bin/win32-x64/geosite.dat resources/bin/ 2>/dev/null || true
+          rm -f resources/bin/win32-x64/LICENSE resources/bin/win32-x64/README.md
 
       - name: Download Chrome
         run: |
