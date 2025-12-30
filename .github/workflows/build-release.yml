@@ -211,48 +211,9 @@ jobs:
           name: linux-x64
           path: dist/*.AppImage
 
-  # ==================== Linux ARM64 ====================
-  build-linux-arm64:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci --ignore-scripts
-
-      - name: Get Xray version
-        id: xray
-        run: |
-          RESPONSE=$(curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases/latest")
-          VER=$(echo "$RESPONSE" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('tag_name',''))" 2>/dev/null || echo "")
-          [ -z "$VER" ] && VER="${{ env.XRAY_FALLBACK_VERSION }}"
-          echo "version=$VER" >> $GITHUB_OUTPUT
-
-      - name: Download Xray
-        run: |
-          mkdir -p resources/bin/linux-arm64
-          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray.outputs.version }}/Xray-linux-arm64-v8a.zip"
-          unzip -o xray.zip -d resources/bin/linux-arm64/ && rm xray.zip
-          mv resources/bin/linux-arm64/geoip.dat resources/bin/linux-arm64/geosite.dat resources/bin/ 2>/dev/null || true
-          rm -f resources/bin/linux-arm64/{LICENSE,README.md}
-          chmod +x resources/bin/linux-arm64/xray
-
-      - run: npx @puppeteer/browsers install chrome@129.0.6668.58 --path resources/puppeteer
-      - name: Build Linux ARM64
-        run: npx electron-builder --linux --arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-arm64
-          path: dist/*.AppImage
-
   # ==================== Create Release ====================
   release:
-    needs: [build-mac-arm64, build-mac-x64, build-windows-x64, build-windows-arm64, build-linux-x64, build-linux-arm64]
+    needs: [build-mac-arm64, build-mac-x64, build-windows-x64, build-windows-arm64, build-linux-x64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
