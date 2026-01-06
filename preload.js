@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveSettings: (data) => ipcRenderer.invoke('save-settings', data),
     exportProfile: (id) => ipcRenderer.invoke('export-profile', id),
     importProfile: () => ipcRenderer.invoke('import-profile'),
+    // 选择 Chrome 可执行文件
+    selectChromeExecutable: () => ipcRenderer.invoke('select-chrome-executable'),
+    // 检测浏览器路径
+    detectBrowserPath: (browserType, customPath) => ipcRenderer.invoke('detect-browser-path', browserType, customPath),
     // 通用 invoke，用于 open-url 等
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
     getRunningIds: () => ipcRenderer.invoke('get-running-ids'),
