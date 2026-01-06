@@ -336,6 +336,7 @@ async function init() {
     window.electronAPI.onProfileStatus(({ id, status }) => {
         const badge = document.getElementById(`status-${id}`);
         if (badge) status === 'running' ? badge.classList.add('active') : badge.classList.remove('active');
+        loadProfiles();
     });
 
     // 核心修复：版本号注入
@@ -524,7 +525,14 @@ async function loadProfiles() {
                         </span>
                     </div>
                 </div>
-                <div class="actions"><button onclick="launch('${p.id}')" class="no-drag">${t('launch')}</button><button class="outline no-drag" onclick="openEditModal('${p.id}')">${t('edit')}</button><button class="danger no-drag" onclick="remove('${p.id}')">${t('delete')}</button></div>
+                <div class="actions">
+                    ${isRunning
+                        ? `<button onclick="closeProfile('${p.id}')" class="danger no-drag">${t('close')}</button>`
+                        : `<button onclick="launch('${p.id}')" class="no-drag">${t('launch')}</button>`
+                    }
+                    <button class="outline no-drag" onclick="openEditModal('${p.id}')">${t('edit')}</button>
+                    <button class="danger no-drag" onclick="remove('${p.id}')">${t('delete')}</button>
+                </div>
             `;
             listEl.appendChild(el);
         });
@@ -651,6 +659,17 @@ async function launch(id) {
         const msg = await window.electronAPI.launchProfile(id, watermarkStyle);
         if (msg && msg.includes(':')) showAlert(msg);
     } catch (e) { showAlert('Error: ' + e.message); }
+}
+
+async function closeProfile(id) {
+    try {
+        const result = await window.electronAPI.closeProfile(id);
+        if (!result.success) {
+            showAlert('关闭失败: ' + (result.message || '未知错误'));
+        }
+    } catch (e) {
+        showAlert('Error: ' + e.message);
+    }
 }
 
 function remove(id) {

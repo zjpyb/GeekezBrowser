@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateProfile: (data) => ipcRenderer.invoke('update-profile', data),
     deleteProfile: (id) => ipcRenderer.invoke('delete-profile', id),
     launchProfile: (id, watermarkStyle) => ipcRenderer.invoke('launch-profile', id, watermarkStyle),
+    closeProfile: (id) => ipcRenderer.invoke('close-profile', id),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (data) => ipcRenderer.invoke('save-settings', data),
     exportProfile: (id) => ipcRenderer.invoke('export-profile', id),

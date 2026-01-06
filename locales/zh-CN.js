@@ -17,6 +17,7 @@ window.zhCN = {
     save: "保存",
     add: "添加",
     launch: "启动",
+    close: "关闭",
     edit: "编辑",
     delete: "删除",
     notify: "通知",
