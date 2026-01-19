@@ -216,11 +216,14 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
     const tempConfigPath = path.join(app.getPath('userData'), `test_config_${tempPort}.json`);
     const tempLogPath = path.join(app.getPath('userData'), `test_log_${tempPort}.log`);
 
+    let xrayProcess = null;
+
     try {
         let outbound;
         try {
             const { parseProxyLink } = require('./utils');
             outbound = parseProxyLink(proxyStr, "proxy_test");
+            console.log('[Test-Proxy] Parsed outbound:', JSON.stringify(outbound, null, 2));
         } catch (err) {
             console.error('[Test-Proxy] Parse error:', err.message);
             return { success: false, msg: "Format Err" };
@@ -253,17 +256,52 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         };
 
         await fs.writeJson(tempConfigPath, config);
+        console.log(`[Test-Proxy] Config saved to: ${tempConfigPath}`);
         console.log(`[Test-Proxy] Starting xray on port ${tempPort} for proxy test`);
+        console.log(`[Test-Proxy] Using xray binary: ${BIN_PATH}`);
 
-        const xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], {
+        // 捕获xray的stderr输出以便调试
+        xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], {
             cwd: BIN_DIR,
             env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN },
-            stdio: 'ignore',
+            stdio: ['ignore', 'pipe', 'pipe'],
             windowsHide: true
+        });
+
+        // 监听xray进程错误
+        let xrayError = '';
+        xrayProcess.stderr.on('data', (data) => {
+            xrayError += data.toString();
+        });
+
+        xrayProcess.stdout.on('data', (data) => {
+            console.log('[Test-Proxy] Xray stdout:', data.toString().trim());
+        });
+
+        xrayProcess.on('error', (err) => {
+            console.error('[Test-Proxy] Xray process error:', err);
+        });
+
+        xrayProcess.on('exit', (code) => {
+            if (code !== null && code !== 0) {
+                console.error(`[Test-Proxy] Xray exited with code ${code}`);
+                if (xrayError) {
+                    console.error('[Test-Proxy] Xray stderr:', xrayError);
+                }
+            }
         });
 
         // 增加等待时间，确保xray完全启动
         await new Promise(r => setTimeout(r, 1500));
+
+        // 检查xray进程是否还在运行
+        if (xrayProcess.killed) {
+            console.error('[Test-Proxy] Xray process was killed');
+            if (xrayError) {
+                console.error('[Test-Proxy] Xray error output:', xrayError);
+            }
+            return { success: false, msg: "Xray Start Failed" };
+        }
 
         const start = Date.now();
         const agent = new SocksProxyAgent(`socks5://127.0.0.1:${tempPort}`);
@@ -284,7 +322,10 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
             });
 
             req.on('error', (err) => {
-                console.error('[Test-Proxy] Request error:', err.message);
+                console.error('[Test-Proxy] Request error:', err.message, err.code);
+                if (xrayError) {
+                    console.error('[Test-Proxy] Xray had errors:', xrayError);
+                }
                 resolve({ success: false, msg: err.code || "Network Error" });
             });
 
@@ -296,10 +337,25 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         });
 
         // 清理
-        await forceKill(xrayProcess.pid);
+        if (xrayProcess && !xrayProcess.killed) {
+            await forceKill(xrayProcess.pid);
+        }
         try {
             fs.unlinkSync(tempConfigPath);
-            fs.unlinkSync(tempLogPath);
+            if (fs.existsSync(tempLogPath)) {
+                // 如果测试失败，打印日志内容
+                if (!result.success) {
+                    try {
+                        const logContent = fs.readFileSync(tempLogPath, 'utf8');
+                        if (logContent) {
+                            console.error('[Test-Proxy] Xray log content:', logContent);
+                        }
+                    } catch (e) {
+                        // 忽略读取错误
+                    }
+                }
+                fs.unlinkSync(tempLogPath);
+            }
         } catch (e) {
             // 忽略删除错误
         }
@@ -307,6 +363,14 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         return result;
     } catch (err) {
         console.error('[Test-Proxy] Unexpected error:', err);
+        // 确保清理xray进程
+        if (xrayProcess && !xrayProcess.killed) {
+            try {
+                await forceKill(xrayProcess.pid);
+            } catch (e) {
+                console.error('[Test-Proxy] Failed to kill xray:', e);
+            }
+        }
         return { success: false, msg: err.message };
     }
 });
