@@ -219,14 +219,15 @@ function parseProxyLink(link, tag) {
                 concurrency: -1
             };
         } else if (link.startsWith('socks')) {
-            // Support two SOCKS5 formats:
+            // Support SOCKS5 formats:
             // 1. v2rayN format: socks://base64(user:pass)@host:port#remark
             // 2. Standard format: socks://user:pass@host:port
+            // 3. Remote DNS: socks5h://user:pass@host:port (DNS resolved on proxy server)
 
             outbound.protocol = "socks";
 
-            // Remove socks:// or socks5://
-            let cleanLink = link.replace(/^socks5?:\/\//, '');
+            // Remove socks://, socks5://, or socks5h://
+            let cleanLink = link.replace(/^socks5?h?:\/\//, '');
 
             // Extract remark if exists (after #)
             const hashIndex = cleanLink.indexOf('#');
@@ -244,24 +245,26 @@ function parseProxyLink(link, tag) {
                 const authPart = cleanLink.substring(0, atIndex);
                 serverPart = cleanLink.substring(atIndex + 1);
 
-                // Try to decode as base64 first (v2rayN style)
-                try {
-                    const decoded = Buffer.from(authPart, 'base64').toString('utf8');
-                    const colonIndex = decoded.indexOf(':');
-                    if (colonIndex !== -1) {
-                        username = decoded.substring(0, colonIndex);
-                        password = decoded.substring(colonIndex + 1);
-                    } else {
-                        // Not a valid user:pass format after decode, treat as plain username
-                        username = authPart;
-                    }
-                } catch (e) {
-                    // Not base64, check if it's user:pass format
-                    const colonIndex = authPart.indexOf(':');
-                    if (colonIndex !== -1) {
-                        username = authPart.substring(0, colonIndex);
-                        password = authPart.substring(colonIndex + 1);
-                    } else {
+                // Check if authPart contains colon (standard user:pass format)
+                const colonIndex = authPart.indexOf(':');
+                if (colonIndex !== -1) {
+                    // Standard format: user:pass
+                    username = authPart.substring(0, colonIndex);
+                    password = authPart.substring(colonIndex + 1);
+                } else {
+                    // Try to decode as base64 (v2rayN style: base64(user:pass))
+                    try {
+                        const decoded = Buffer.from(authPart, 'base64').toString('utf8');
+                        const decodedColonIndex = decoded.indexOf(':');
+                        if (decodedColonIndex !== -1) {
+                            username = decoded.substring(0, decodedColonIndex);
+                            password = decoded.substring(decodedColonIndex + 1);
+                        } else {
+                            // Not a valid user:pass format after decode, treat as username only
+                            username = authPart;
+                        }
+                    } catch (e) {
+                        // Not base64, treat as username only
                         username = authPart;
                     }
                 }
@@ -324,8 +327,21 @@ function generateXrayConfig(mainProxyStr, localPort, preProxyConfig = null) {
             const target = preProxyConfig.preProxies[0];
             const preOutbound = parseProxyLink(target.url, "proxy_pre");
             outbounds.push(preOutbound);
-            mainOutbound.proxySettings = { tag: "proxy_pre" };
-        } catch (e) { }
+
+            // 使用streamSettings配置前置代理链
+            // 这是Xray推荐的链式代理方式
+            if (!mainOutbound.streamSettings) {
+                mainOutbound.streamSettings = {};
+            }
+            if (!mainOutbound.streamSettings.sockopt) {
+                mainOutbound.streamSettings.sockopt = {};
+            }
+            mainOutbound.streamSettings.sockopt.dialerProxy = "proxy_pre";
+
+            console.log('[Xray Config] Using pre-proxy chain:', target.remark || target.url);
+        } catch (e) {
+            console.error('[Xray Config] Failed to setup pre-proxy:', e.message);
+        }
     }
 
     outbounds.push(mainOutbound);
