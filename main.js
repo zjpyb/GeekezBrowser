@@ -307,14 +307,18 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         const agent = new SocksProxyAgent(`socks5://127.0.0.1:${tempPort}`);
 
         const result = await new Promise((resolve) => {
-            const req = http.get('http://cp.cloudflare.com/generate_204', {
+            // 使用IPv4专用地址避免IPv6问题
+            // 1.1.1.1 是Cloudflare的公共DNS，支持生成204响应
+            const req = http.get('http://1.1.1.1/cdn-cgi/trace', {
                 agent,
-                timeout: 10000 // 增加到10秒
+                timeout: 10000,
+                family: 4 // 强制使用IPv4
             }, (res) => {
                 const latency = Date.now() - start;
                 console.log(`[Test-Proxy] Response status: ${res.statusCode}, latency: ${latency}ms`);
 
-                if (res.statusCode === 204) {
+                // 1.1.1.1/cdn-cgi/trace 返回200，包含连接信息
+                if (res.statusCode === 200) {
                     resolve({ success: true, latency });
                 } else {
                     resolve({ success: false, msg: `HTTP ${res.statusCode}` });
