@@ -223,7 +223,6 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         try {
             const { parseProxyLink } = require('./utils');
             outbound = parseProxyLink(proxyStr, "proxy_test");
-            console.log('[Test-Proxy] Parsed outbound:', JSON.stringify(outbound, null, 2));
         } catch (err) {
             console.error('[Test-Proxy] Parse error:', err.message);
             return { success: false, msg: "Format Err" };
@@ -256,15 +255,12 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         };
 
         await fs.writeJson(tempConfigPath, config);
-        console.log(`[Test-Proxy] Config saved to: ${tempConfigPath}`);
-        console.log(`[Test-Proxy] Starting xray on port ${tempPort} for proxy test`);
-        console.log(`[Test-Proxy] Using xray binary: ${BIN_PATH}`);
 
-        // 捕获xray的stderr输出以便调试
+        // 启动xray进程
         xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], {
             cwd: BIN_DIR,
             env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN },
-            stdio: ['ignore', 'pipe', 'pipe'],
+            stdio: ['ignore', 'ignore', 'pipe'], // 只捕获stderr
             windowsHide: true
         });
 
@@ -274,31 +270,18 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
             xrayError += data.toString();
         });
 
-        xrayProcess.stdout.on('data', (data) => {
-            console.log('[Test-Proxy] Xray stdout:', data.toString().trim());
-        });
-
         xrayProcess.on('error', (err) => {
             console.error('[Test-Proxy] Xray process error:', err);
         });
 
-        xrayProcess.on('exit', (code) => {
-            if (code !== null && code !== 0) {
-                console.error(`[Test-Proxy] Xray exited with code ${code}`);
-                if (xrayError) {
-                    console.error('[Test-Proxy] Xray stderr:', xrayError);
-                }
-            }
-        });
-
-        // 增加等待时间，确保xray完全启动
+        // 等待xray启动
         await new Promise(r => setTimeout(r, 1500));
 
         // 检查xray进程是否还在运行
         if (xrayProcess.killed) {
             console.error('[Test-Proxy] Xray process was killed');
             if (xrayError) {
-                console.error('[Test-Proxy] Xray error output:', xrayError);
+                console.error('[Test-Proxy] Xray error:', xrayError);
             }
             return { success: false, msg: "Xray Start Failed" };
         }
@@ -313,25 +296,27 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
                 timeout: 10000
             }, (res) => {
                 const latency = Date.now() - start;
-                console.log(`[Test-Proxy] Response status: ${res.statusCode}, latency: ${latency}ms`);
 
                 if (res.statusCode === 204) {
                     resolve({ success: true, latency });
                 } else {
+                    console.warn(`[Test-Proxy] Unexpected status: ${res.statusCode}`);
                     resolve({ success: false, msg: `HTTP ${res.statusCode}` });
                 }
             });
 
             req.on('error', (err) => {
-                console.error('[Test-Proxy] Request error:', err.message, err.code);
-                if (xrayError) {
-                    console.error('[Test-Proxy] Xray had errors:', xrayError);
+                // 只在调试模式下输出详细错误
+                if (process.env.DEBUG_PROXY) {
+                    console.error('[Test-Proxy] Request error:', err.message, err.code);
+                    if (xrayError) {
+                        console.error('[Test-Proxy] Xray errors:', xrayError);
+                    }
                 }
                 resolve({ success: false, msg: err.code || "Network Error" });
             });
 
             req.on('timeout', () => {
-                console.warn('[Test-Proxy] Request timeout');
                 req.destroy();
                 resolve({ success: false, msg: "Timeout" });
             });
@@ -344,17 +329,6 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         try {
             fs.unlinkSync(tempConfigPath);
             if (fs.existsSync(tempLogPath)) {
-                // 如果测试失败，打印日志内容
-                if (!result.success) {
-                    try {
-                        const logContent = fs.readFileSync(tempLogPath, 'utf8');
-                        if (logContent) {
-                            console.error('[Test-Proxy] Xray log content:', logContent);
-                        }
-                    } catch (e) {
-                        // 忽略读取错误
-                    }
-                }
                 fs.unlinkSync(tempLogPath);
             }
         } catch (e) {
@@ -369,7 +343,7 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
             try {
                 await forceKill(xrayProcess.pid);
             } catch (e) {
-                console.error('[Test-Proxy] Failed to kill xray:', e);
+                // 忽略清理错误
             }
         }
         return { success: false, msg: err.message };
