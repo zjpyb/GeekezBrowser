@@ -1180,6 +1180,7 @@ function openSettings() {
     loadUserExtensions();
     loadWatermarkStyle();
     loadRemoteDebuggingSetting();
+    loadXraySettings();
 }
 function closeSettings() {
     document.getElementById('settingsModal').style.display = 'none';
@@ -1428,6 +1429,284 @@ async function updateBrowserPathHint(prefix, browserType, customPath) {
         console.error('[updateBrowserPathHint] 路径检测失败:', err);
         hintElement.textContent = errorMsg;
         hintElement.style.color = '#888';
+    }
+}
+
+// ============================================================================
+// Xray Core Management Functions
+// ============================================================================
+
+/**
+ * 加载xray核心设置
+ */
+async function loadXraySettings() {
+    try {
+        const xrayInfo = await window.electronAPI.invoke('get-xray-info');
+
+        // 更新当前版本显示
+        const currentVersionEl = document.getElementById('currentXrayVersion');
+        const lastUpdateEl = document.getElementById('xrayLastUpdate');
+
+        if (currentVersionEl) {
+            currentVersionEl.textContent = xrayInfo.currentVersion || 'Unknown';
+        }
+
+        if (lastUpdateEl) {
+            lastUpdateEl.textContent = xrayInfo.lastUpdate || '-';
+        }
+
+        // 加载可用版本列表（本地 + GitHub）
+        await loadXrayVersionsList(xrayInfo);
+
+    } catch (error) {
+        console.error('Failed to load xray settings:', error);
+        const currentVersionEl = document.getElementById('currentXrayVersion');
+        if (currentVersionEl) {
+            currentVersionEl.textContent = 'Error loading';
+        }
+    }
+}
+
+/**
+ * 刷新xray版本列表
+ */
+async function refreshXrayVersions() {
+    const versionsList = document.getElementById('xrayVersionsList');
+    if (versionsList) {
+        versionsList.innerHTML = `
+            <div style="text-align:center; padding:20px; color:var(--text-secondary);">
+                ${t('xrayLoadingVersions') || 'Loading versions...'}
+            </div>
+        `;
+    }
+    await loadXraySettings();
+}
+
+/**
+ * 加载可用版本列表（本地 + GitHub最新10个版本）
+ */
+async function loadXrayVersionsList(xrayInfo) {
+    const versionsList = document.getElementById('xrayVersionsList');
+    const versionSelect = document.getElementById('xrayVersionSelect');
+
+    if (!versionsList || !versionSelect) return;
+
+    // 清��选择框
+    versionSelect.innerHTML = '<option value="" disabled selected>' + t('xraySelectVersion') + '</option>';
+
+    try {
+        // 获取GitHub最新版本
+        const githubVersions = await window.electronAPI.invoke('get-github-xray-releases');
+
+        // 合并本地版本和GitHub版本，去重
+        const localVersions = xrayInfo.availableVersions || [];
+        const allVersionsSet = new Set([...localVersions]);
+
+        // 添加GitHub版本到集合
+        if (githubVersions && githubVersions.length > 0) {
+            githubVersions.forEach(v => allVersionsSet.add(v.tag_name));
+        }
+
+        const allVersions = Array.from(allVersionsSet);
+
+        if (allVersions.length === 0) {
+            versionsList.innerHTML = `
+                <div style="text-align:center; padding:20px; color:var(--text-secondary);">
+                    ${t('xrayNoVersions') || 'No versions available'}
+                </div>
+            `;
+            return;
+        }
+
+        // 获取当前版本的key（用于比较）
+        const currentVersionKey = xrayInfo.currentVersionKey || '';
+
+        // 获取所有本地版本的详细信息（包括default的实际版本号）
+        const versionDetailsMap = {};
+        for (const versionKey of localVersions) {
+            const details = await window.electronAPI.invoke('get-xray-version-details', versionKey);
+            versionDetailsMap[versionKey] = details;
+        }
+
+        // 构建版本列表HTML
+        let versionsHTML = '';
+
+        // 分组显示：已安装的版本在前，GitHub版本在后
+        const installedVersions = allVersions.filter(v => localVersions.includes(v));
+        const githubOnlyVersions = allVersions.filter(v => !localVersions.includes(v));
+
+        // 显示已安装的版本
+        if (installedVersions.length > 0) {
+            versionsHTML += `<div style="font-size:11px; color:var(--text-secondary); margin-bottom:8px; font-weight:bold;">${t('xrayInstalledVersions') || '📥 Installed'}</div>`;
+            installedVersions.forEach(versionKey => {
+                const isCurrent = versionKey === currentVersionKey;
+                const versionDetails = versionDetailsMap[versionKey] || { displayName: versionKey };
+                versionsHTML += createVersionItem(versionKey, versionDetails.displayName, isCurrent, true, githubVersions);
+            });
+        }
+
+        // 显示GitHub上的其他版本
+        if (githubOnlyVersions.length > 0) {
+            versionsHTML += `<div style="font-size:11px; color:var(--text-secondary); margin:15px 0 8px 0; font-weight:bold;">${t('xrayGithubVersions') || '☁️ Available on GitHub (Latest 10)'}</div>`;
+            githubOnlyVersions.forEach(versionKey => {
+                versionsHTML += createVersionItem(versionKey, versionKey, false, false, githubVersions);
+            });
+        }
+
+        versionsList.innerHTML = versionsHTML;
+
+        // 填充下拉选择框（仅已安装的版本）
+        installedVersions.forEach(versionKey => {
+            const option = document.createElement('option');
+            option.value = versionKey;
+            const versionDetails = versionDetailsMap[versionKey] || { displayName: versionKey };
+            option.textContent = versionDetails.displayName;
+            if (versionKey === currentVersionKey) {
+                option.textContent += ' (' + (t('xrayCurrent') || 'Current') + ')';
+                option.disabled = true;
+            }
+            versionSelect.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Failed to load versions list:', error);
+        versionsList.innerHTML = `
+            <div style="text-align:center; padding:20px; color:var(--danger);">
+                ${t('xrayLoadError') || 'Failed to load versions'}
+            </div>
+        `;
+    }
+}
+
+/**
+ * 创建版本列表项HTML
+ */
+function createVersionItem(versionKey, displayName, isCurrent, isInstalled, githubVersions) {
+    // 查找GitHub版本信息
+    const githubRelease = githubVersions?.find(r => r.tag_name === versionKey);
+    const publishDate = githubRelease ? new Date(githubRelease.published_at).toLocaleDateString() : '';
+
+    let html = `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:10px; border:1px solid var(--border); border-radius:4px; margin-bottom:8px; ${isCurrent ? 'background:rgba(var(--accent-rgb, 103,128,255),0.1); border-color:var(--accent);' : ''}">
+            <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-family:monospace; font-size:13px; color:var(--text-primary); font-weight:${isCurrent ? 'bold' : 'normal'};">
+                        ${displayName}
+                    </span>
+                    ${isCurrent ? `<span style="color:var(--accent); font-size:11px;">✓ ${t('xrayCurrent') || 'Current'}</span>` : ''}
+                    ${isInstalled && !isCurrent ? `<span style="color:#28a745; font-size:11px;">📥 ${t('xrayInstalled') || 'Installed'}</span>` : ''}
+                </div>`;
+
+    if (publishDate) {
+        html += `<div style="font-size:10px; color:var(--text-secondary); margin-top:3px;">📅 ${publishDate}</div>`;
+    }
+
+    html += `</div>
+            <div style="display:flex; gap:8px;">`;
+
+    if (isInstalled && !isCurrent) {
+        html += `<button class="outline" onclick="selectXrayVersion('${versionKey}')" style="padding:6px 15px; font-size:12px;">${t('xraySelect') || 'Select'}</button>`;
+    }
+
+    if (!isInstalled) {
+        html += `<button class="outline" onclick="downloadXrayVersionQuick('${versionKey}')" style="padding:6px 15px; font-size:12px;">${t('xrayDownloadBtn') || 'Download'}</button>`;
+    }
+
+    html += `</div>
+        </div>
+    `;
+
+    return html;
+}
+
+/**
+ * 快速下载指定版本
+ */
+async function downloadXrayVersionQuick(version) {
+    try {
+        showAlert(t('xrayDownloading') || `Downloading ${version}...`);
+
+        const result = await window.electronAPI.invoke('download-xray-version', version);
+
+        if (result.success) {
+            showAlert(t('xrayDownloadSuccess') || `Successfully downloaded ${version}`);
+            // 重新加载xray设置以更新UI
+            await loadXraySettings();
+        } else {
+            showAlert(t('xrayDownloadFailed') || `Failed to download: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Failed to download xray version:', error);
+        showAlert(t('xrayDownloadError') || 'Error downloading xray version: ' + error.message);
+    }
+}
+
+/**
+ * 选择xray版本（从列表中）
+ */
+function selectXrayVersion(version) {
+    const versionSelect = document.getElementById('xrayVersionSelect');
+    if (versionSelect) {
+        versionSelect.value = version;
+    }
+}
+
+/**
+ * 切换xray版本
+ */
+async function switchXrayVersion() {
+    const versionSelect = document.getElementById('xrayVersionSelect');
+    if (!versionSelect || !versionSelect.value) {
+        showAlert(t('xraySelectVersionFirst') || 'Please select a version first');
+        return;
+    }
+
+    const selectedVersion = versionSelect.value;
+
+    try {
+        const result = await window.electronAPI.invoke('switch-xray-version', selectedVersion);
+
+        if (result.success) {
+            showAlert(t('xraySwitchSuccess') || `Successfully switched to ${selectedVersion}. Please restart running profiles.`);
+            // 重新加载xray设置以更新UI
+            await loadXraySettings();
+        } else {
+            showAlert(t('xraySwitchFailed') || `Failed to switch version: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Failed to switch xray version:', error);
+        showAlert(t('xraySwitchError') || 'Error switching xray version: ' + error.message);
+    }
+}
+
+/**
+ * 下载xray版本
+ */
+async function downloadXrayVersion() {
+    const versionInput = document.getElementById('xrayVersionInput');
+    if (!versionInput || !versionInput.value.trim()) {
+        showAlert(t('xrayEnterVersion') || 'Please enter a version');
+        return;
+    }
+
+    const version = versionInput.value.trim();
+
+    try {
+        showAlert(t('xrayDownloading') || `Downloading ${version}...`);
+
+        const result = await window.electronAPI.invoke('download-xray-version', version);
+
+        if (result.success) {
+            showAlert(t('xrayDownloadSuccess') || `Successfully downloaded ${version}`);
+            versionInput.value = '';
+            // 重新加载xray设置以更新UI
+            await loadXraySettings();
+        } else {
+            showAlert(t('xrayDownloadFailed') || `Failed to download: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Failed to download xray version:', error);
+        showAlert(t('xrayDownloadError') || 'Error downloading xray version: ' + error.message);
     }
 }
 

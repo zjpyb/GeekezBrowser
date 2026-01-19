@@ -1309,6 +1309,7 @@
             <div class="tab-header">
                 <div class="tab-btn active" onclick="switchSettingsTab('extensions')" data-i18n="settingsTabExtensions">
                     Extensions</div>
+                <div class="tab-btn" onclick="switchSettingsTab('xray')" data-i18n="settingsTabXray">Xray Core</div>
                 <div class="tab-btn" onclick="switchSettingsTab('advanced')" data-i18n="settingsTabAdvanced"> Advanced
                 </div>
             </div>
@@ -1325,6 +1326,96 @@
                         + Add Extension Folder
                     </button>
                     <div id="userExtensionList" style="margin-top:10px;"></div>
+                </div>
+
+                <!-- Xray Core Tab -->
+                <div id="settings-xray" class="settings-section" style="display:none;">
+                    <h3 style="margin-bottom:15px; color:var(--accent);" data-i18n="settingsXrayTitle">Xray Core Management</h3>
+                    <p style="font-size:12px; opacity:0.7; margin-bottom:15px;" data-i18n="settingsXrayDesc">
+                        Manage Xray core versions. Switch between different versions for compatibility or testing.
+                    </p>
+
+                    <!-- Current Version Display -->
+                    <div style="background:rgba(var(--accent-rgb, 103,128,255),0.1); border:1px solid var(--accent); border-radius:6px; padding:15px; margin-bottom:20px;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                            <span style="font-size:20px;">🚀</span>
+                            <strong style="color:var(--accent);" data-i18n="xrayCurrentVersion">Current Version</strong>
+                        </div>
+                        <div style="font-size:14px; color:var(--text-primary); margin-left:30px;">
+                            <span data-i18n="xrayVersion">Version: </span><span id="currentXrayVersion" style="font-family:monospace; color:var(--accent);">Loading...</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--text-secondary); margin-left:30px; margin-top:5px;">
+                            <span data-i18n="xrayLastUpdate">Last updated: </span><span id="xrayLastUpdate">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Version Selection -->
+                    <div style="margin-bottom:20px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;" data-i18n="xraySwitchTitle">
+                            🔄 Switch Version
+                        </h4>
+                        <p style="font-size:11px; opacity:0.7; margin-bottom:12px;" data-i18n="xraySwitchDesc">
+                            Select a version to switch. Changes will take effect on next profile launch.
+                        </p>
+
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <select id="xrayVersionSelect" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary); font-family:monospace; font-size:13px;">
+                                <option value="" disabled selected data-i18n="xraySelectVersion">Select a version...</option>
+                            </select>
+                            <button onclick="switchXrayVersion()" style="padding:10px 20px; white-space:nowrap;" data-i18n="xraySwitchBtn">
+                                Switch Version
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Available Versions List -->
+                    <div style="margin-bottom:20px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px; display:flex; align-items:center; justify-content:space-between;">
+                            <span data-i18n="xrayAvailableTitle">📦 Available Versions</span>
+                            <button onclick="refreshXrayVersions()" class="outline" style="padding:4px 12px; font-size:11px;" data-i18n="xrayRefreshBtn">
+                                🔄 Refresh
+                            </button>
+                        </h4>
+                        <p style="font-size:11px; opacity:0.7; margin-bottom:12px;" data-i18n="xrayAvailableDesc">
+                            Showing local versions and latest 10 releases from GitHub
+                        </p>
+                        <div id="xrayVersionsList" style="margin-top:10px; max-height:300px; overflow-y:auto;">
+                            <div style="text-align:center; padding:20px; color:var(--text-secondary);" data-i18n="xrayLoadingVersions">
+                                Loading versions...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Download New Version -->
+                    <div style="margin-bottom:20px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;" data-i18n="xrayDownloadTitle">
+                            ⬇️ Download New Version
+                        </h4>
+                        <p style="font-size:11px; opacity:0.7; margin-bottom:12px;" data-i18n="xrayDownloadDesc">
+                            Enter a specific version tag or use 'latest' to download the newest version.
+                        </p>
+
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="text" id="xrayVersionInput" placeholder="e.g., v1.8.20 or latest"
+                                   style="flex:1; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary); font-family:monospace; font-size:13px;">
+                            <button onclick="downloadXrayVersion()" style="padding:10px 20px; white-space:nowrap;" data-i18n="xrayDownloadBtn">
+                                Download
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div style="background:rgba(103,128,255,0.05); border:1px solid rgba(103,128,255,0.2); border-radius:6px; padding:12px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                            <span style="font-size:16px;">ℹ️</span>
+                            <strong style="color:var(--text-primary); font-size:12px;" data-i18n="xrayInfoTitle">Important Notes</strong>
+                        </div>
+                        <ul style="font-size:11px; line-height:1.6; margin:0; padding-left:28px; color:var(--text-secondary);">
+                            <li data-i18n="xrayInfo1">Version changes require restarting running profiles</li>
+                            <li data-i18n="xrayInfo2">Downloaded versions are stored locally and can be switched anytime</li>
+                            <li data-i18n="xrayInfo3">Check <a href="https://github.com/XTLS/Xray-core/releases" target="_blank" style="color:var(--accent);">Xray releases</a> for available versions</li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Advanced Tab -->

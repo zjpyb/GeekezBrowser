@@ -457,6 +457,350 @@ ipcMain.handle('get-user-extensions', async () => {
     const settings = await fs.readJson(SETTINGS_FILE);
     return settings.userExtensions || [];
 });
+
+// ============================================================================
+// Xray Core Version Management
+// ============================================================================
+
+/**
+ * 获取xray核心信息
+ */
+ipcMain.handle('get-xray-info', async () => {
+    try {
+        const xrayVersionsDir = path.join(app.getPath('userData'), 'xray-versions');
+        await fs.ensureDir(xrayVersionsDir);
+
+        // 读取版本配置文件
+        const versionConfigPath = path.join(xrayVersionsDir, 'version-config.json');
+        let versionConfig = { currentVersion: null, versions: [] };
+
+        if (fs.existsSync(versionConfigPath)) {
+            versionConfig = await fs.readJson(versionConfigPath);
+        }
+
+        // 如果没有当前版本，检查默认位置的xray
+        if (!versionConfig.currentVersion) {
+            if (fs.existsSync(BIN_PATH)) {
+                versionConfig.currentVersion = 'default';
+                versionConfig.versions = ['default'];
+                await fs.writeJson(versionConfigPath, versionConfig);
+            }
+        }
+
+        // 获取所有可用版本（扫描xray-versions目录）
+        const availableVersions = [];
+        if (fs.existsSync(xrayVersionsDir)) {
+            const files = await fs.readdir(xrayVersionsDir);
+            for (const file of files) {
+                const versionDir = path.join(xrayVersionsDir, file);
+                const stat = await fs.stat(versionDir);
+                if (stat.isDirectory()) {
+                    const exeName = process.platform === 'win32' ? 'xray.exe' : 'xray';
+                    const xrayBinary = path.join(versionDir, exeName);
+                    if (fs.existsSync(xrayBinary)) {
+                        availableVersions.push(file);
+                    }
+                }
+            }
+        }
+
+        // 如果有默认版本，添加到列表
+        if (fs.existsSync(BIN_PATH) && !availableVersions.includes('default')) {
+            availableVersions.unshift('default');
+        }
+
+        // 获取当前版本的实际版本号和最后更新时间
+        let currentVersionDisplay = versionConfig.currentVersion || 'Unknown';
+        let lastUpdate = '-';
+
+        if (versionConfig.currentVersion) {
+            try {
+                const currentBinaryPath = await getXrayBinaryPath(versionConfig.currentVersion);
+                if (currentBinaryPath && fs.existsSync(currentBinaryPath)) {
+                    // 获取文件修改时间
+                    const stats = await fs.stat(currentBinaryPath);
+                    lastUpdate = new Date(stats.mtime).toLocaleString();
+
+                    // 如果是default版本，获取实际版本号
+                    if (versionConfig.currentVersion === 'default') {
+                        const actualVersion = await getXrayVersion(currentBinaryPath);
+                        if (actualVersion) {
+                            currentVersionDisplay = `default (${actualVersion})`;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to get xray binary stats:', error);
+            }
+        }
+
+        return {
+            currentVersion: currentVersionDisplay,
+            currentVersionKey: versionConfig.currentVersion, // 用于内部识别
+            availableVersions: availableVersions,
+            lastUpdate: lastUpdate
+        };
+    } catch (error) {
+        console.error('Failed to get xray info:', error);
+        return {
+            currentVersion: 'Error',
+            currentVersionKey: null,
+            availableVersions: [],
+            lastUpdate: '-'
+        };
+    }
+});
+
+/**
+ * 获取xray版本号
+ */
+async function getXrayVersion(binaryPath) {
+    return new Promise((resolve) => {
+        exec(`"${binaryPath}" --version`, { timeout: 5000 }, (error, stdout, stderr) => {
+            if (error) {
+                console.error('Failed to get xray version:', error);
+                resolve(null);
+                return;
+            }
+
+            try {
+                // 解析版本信息，xray输出格式如: "Xray 1.8.20 (Xray, Penetrates Everything.)"
+                const output = stdout || stderr;
+                const match = output.match(/Xray\s+([\d.]+)/i);
+                if (match && match[1]) {
+                    resolve('v' + match[1]);
+                } else {
+                    resolve(null);
+                }
+            } catch (e) {
+                console.error('Failed to parse xray version:', e);
+                resolve(null);
+            }
+        });
+    });
+}
+
+/**
+ * 获取GitHub上Xray-core的最新10个发布版本
+ */
+ipcMain.handle('get-github-xray-releases', async () => {
+    try {
+        const apiUrl = 'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=10';
+        const releases = await fetchJson(apiUrl);
+
+        if (!releases || !Array.isArray(releases)) {
+            console.error('Invalid releases data from GitHub');
+            return [];
+        }
+
+        // 返回简化的版本信息
+        return releases.map(release => ({
+            tag_name: release.tag_name,
+            name: release.name,
+            published_at: release.published_at,
+            prerelease: release.prerelease
+        }));
+
+    } catch (error) {
+        console.error('Failed to get GitHub releases:', error);
+        return [];
+    }
+});
+
+/**
+ * 获取版本的详细信息（包括default的实际版本号）
+ */
+ipcMain.handle('get-xray-version-details', async (e, versionKey) => {
+    try {
+        const binaryPath = await getXrayBinaryPath(versionKey);
+        if (!binaryPath || !fs.existsSync(binaryPath)) {
+            return { versionKey, displayName: versionKey, actualVersion: null };
+        }
+
+        // 如果是default，获取实际版本号
+        if (versionKey === 'default') {
+            const actualVersion = await getXrayVersion(binaryPath);
+            return {
+                versionKey: 'default',
+                displayName: actualVersion ? `default (${actualVersion})` : 'default',
+                actualVersion: actualVersion
+            };
+        }
+
+        // 其他版本直接返回
+        return {
+            versionKey: versionKey,
+            displayName: versionKey,
+            actualVersion: versionKey
+        };
+    } catch (error) {
+        console.error('Failed to get version details:', error);
+        return { versionKey, displayName: versionKey, actualVersion: null };
+    }
+});
+
+/**
+ * 获取xray二进制文件路径
+ */
+async function getXrayBinaryPath(version) {
+    const exeName = process.platform === 'win32' ? 'xray.exe' : 'xray';
+
+    if (version === 'default') {
+        return BIN_PATH;
+    }
+
+    const xrayVersionsDir = path.join(app.getPath('userData'), 'xray-versions');
+    const versionPath = path.join(xrayVersionsDir, version, exeName);
+
+    if (fs.existsSync(versionPath)) {
+        return versionPath;
+    }
+
+    return null;
+}
+
+/**
+ * 切换xray版本
+ */
+ipcMain.handle('switch-xray-version', async (e, version) => {
+    try {
+        const xrayVersionsDir = path.join(app.getPath('userData'), 'xray-versions');
+        const versionConfigPath = path.join(xrayVersionsDir, 'version-config.json');
+
+        // 验证版本是否存在
+        const binaryPath = await getXrayBinaryPath(version);
+        if (!binaryPath || !fs.existsSync(binaryPath)) {
+            return { success: false, error: 'Version not found' };
+        }
+
+        // 读取或创建版本配置
+        let versionConfig = { currentVersion: null, versions: [] };
+        if (fs.existsSync(versionConfigPath)) {
+            versionConfig = await fs.readJson(versionConfigPath);
+        }
+
+        // 更新当前版本
+        versionConfig.currentVersion = version;
+
+        // 将版本添加到列表（如果不存在）
+        if (!versionConfig.versions.includes(version)) {
+            versionConfig.versions.push(version);
+        }
+
+        // 保存配置
+        await fs.writeJson(versionConfigPath, versionConfig);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to switch xray version:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * 下载xray版本
+ */
+ipcMain.handle('download-xray-version', async (e, versionTag) => {
+    try {
+        // 如果是latest，先获取最新版本号
+        let version = versionTag;
+        if (versionTag === 'latest') {
+            const apiUrl = 'https://api.github.com/repos/XTLS/Xray-core/releases/latest';
+            const data = await fetchJson(apiUrl);
+            version = data.tag_name;
+        }
+
+        // 确保版本号以v开头
+        if (!version.startsWith('v')) {
+            version = 'v' + version;
+        }
+
+        // 构建下载URL
+        const platform = process.platform;
+        const arch = process.arch;
+
+        let osName, archName;
+
+        // 映射平台和架构名称
+        if (platform === 'darwin') {
+            osName = 'macos';
+        } else if (platform === 'win32') {
+            osName = 'windows';
+        } else if (platform === 'linux') {
+            osName = 'linux';
+        } else {
+            return { success: false, error: 'Unsupported platform' };
+        }
+
+        if (arch === 'x64') {
+            archName = '64';
+        } else if (arch === 'arm64') {
+            archName = 'arm64-v8a';
+        } else {
+            return { success: false, error: 'Unsupported architecture' };
+        }
+
+        const fileName = `Xray-${osName}-${archName}.zip`;
+        const downloadUrl = `https://github.com/XTLS/Xray-core/releases/download/${version}/${fileName}`;
+
+        console.log('Downloading from:', downloadUrl);
+
+        // 准备下载目录
+        const xrayVersionsDir = path.join(app.getPath('userData'), 'xray-versions');
+        const versionDir = path.join(xrayVersionsDir, version);
+        await fs.ensureDir(versionDir);
+
+        // 下载文件到临时位置
+        const tempBase = os.tmpdir();
+        const downloadId = `xray_download_${Date.now()}`;
+        const tempDir = path.join(tempBase, downloadId);
+        const zipPath = path.join(tempDir, 'xray.zip');
+
+        fs.mkdirSync(tempDir, { recursive: true });
+
+        // 使用现有的downloadFile函数
+        await downloadFile(downloadUrl, zipPath);
+
+        // 解压文件
+        const AdmZip = require('adm-zip');
+        const zip = new AdmZip(zipPath);
+        zip.extractAllTo(versionDir, true);
+
+        // 设置执行权限（非Windows）
+        if (process.platform !== 'win32') {
+            const exePath = path.join(versionDir, 'xray');
+            if (fs.existsSync(exePath)) {
+                await fs.chmod(exePath, 0o755);
+            }
+        }
+
+        // 清理临时文件
+        try {
+            fs.removeSync(tempDir);
+        } catch (e) {
+            console.warn('Failed to clean up temp dir:', e);
+        }
+
+        // 更新版本配置
+        const versionConfigPath = path.join(xrayVersionsDir, 'version-config.json');
+        let versionConfig = { currentVersion: null, versions: [] };
+        if (fs.existsSync(versionConfigPath)) {
+            versionConfig = await fs.readJson(versionConfigPath);
+        }
+
+        if (!versionConfig.versions.includes(version)) {
+            versionConfig.versions.push(version);
+        }
+
+        await fs.writeJson(versionConfigPath, versionConfig);
+
+        return { success: true, version: version };
+    } catch (error) {
+        console.error('Failed to download xray version:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 // 选择 Chrome 可执行文件
 ipcMain.handle('select-chrome-executable', async () => {
     try {
@@ -681,7 +1025,29 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
         const config = generateXrayConfig(profile.proxyStr, localPort, finalPreProxyConfig);
         fs.writeJsonSync(xrayConfigPath, config);
         const logFd = fs.openSync(xrayLogPath, 'a');
-        const xrayProcess = spawn(BIN_PATH, ['-c', xrayConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN }, stdio: ['ignore', logFd, logFd], windowsHide: true });
+
+        // 获取当前xray版本的路径
+        let xrayBinPath = BIN_PATH;
+        let xrayBinDir = BIN_DIR;
+        try {
+            const xrayVersionsDir = path.join(app.getPath('userData'), 'xray-versions');
+            const versionConfigPath = path.join(xrayVersionsDir, 'version-config.json');
+            if (fs.existsSync(versionConfigPath)) {
+                const versionConfig = await fs.readJson(versionConfigPath);
+                if (versionConfig.currentVersion && versionConfig.currentVersion !== 'default') {
+                    const customBinaryPath = await getXrayBinaryPath(versionConfig.currentVersion);
+                    if (customBinaryPath && fs.existsSync(customBinaryPath)) {
+                        xrayBinPath = customBinaryPath;
+                        xrayBinDir = path.dirname(customBinaryPath);
+                        console.log(`Using xray version ${versionConfig.currentVersion} from ${xrayBinPath}`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load xray version config, using default:', error);
+        }
+
+        const xrayProcess = spawn(xrayBinPath, ['-c', xrayConfigPath], { cwd: xrayBinDir, env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN }, stdio: ['ignore', logFd, logFd], windowsHide: true });
 
         // 优化：减少等待时间，Xray 通常 300ms 内就能启动
         await new Promise(resolve => setTimeout(resolve, 300));
