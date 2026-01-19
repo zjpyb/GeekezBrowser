@@ -212,22 +212,103 @@ app.whenReady().then(async () => {
 ipcMain.handle('get-app-info', () => { return { name: app.getName(), version: app.getVersion() }; });
 ipcMain.handle('fetch-url', async (e, url) => { try { const res = await fetch(url); if (!res.ok) throw new Error('HTTP ' + res.status); return await res.text(); } catch (e) { throw e.message; } });
 ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
-    const tempPort = await getPort(); const tempConfigPath = path.join(app.getPath('userData'), `test_config_${tempPort}.json`);
+    const tempPort = await getPort();
+    const tempConfigPath = path.join(app.getPath('userData'), `test_config_${tempPort}.json`);
+    const tempLogPath = path.join(app.getPath('userData'), `test_log_${tempPort}.log`);
+
     try {
-        let outbound; try { const { parseProxyLink } = require('./utils'); outbound = parseProxyLink(proxyStr, "proxy_test"); } catch (err) { return { success: false, msg: "Format Err" }; }
-        const config = { log: { loglevel: "none" }, inbounds: [{ port: tempPort, listen: "127.0.0.1", protocol: "socks", settings: { udp: true } }], outbounds: [outbound, { protocol: "freedom", tag: "direct" }], routing: { rules: [{ type: "field", outboundTag: "proxy_test", port: "0-65535" }] } };
+        let outbound;
+        try {
+            const { parseProxyLink } = require('./utils');
+            outbound = parseProxyLink(proxyStr, "proxy_test");
+        } catch (err) {
+            console.error('[Test-Proxy] Parse error:', err.message);
+            return { success: false, msg: "Format Err" };
+        }
+
+        // 配置xray，开启warning日志以便调试
+        const config = {
+            log: {
+                loglevel: "warning",
+                access: tempLogPath,
+                error: tempLogPath
+            },
+            inbounds: [{
+                port: tempPort,
+                listen: "127.0.0.1",
+                protocol: "socks",
+                settings: { udp: true }
+            }],
+            outbounds: [
+                outbound,
+                { protocol: "freedom", tag: "direct" }
+            ],
+            routing: {
+                rules: [{
+                    type: "field",
+                    outboundTag: "proxy_test",
+                    port: "0-65535"
+                }]
+            }
+        };
+
         await fs.writeJson(tempConfigPath, config);
-        const xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN }, stdio: 'ignore', windowsHide: true });
-        await new Promise(r => setTimeout(r, 800));
-        const start = Date.now(); const agent = new SocksProxyAgent(`socks5://127.0.0.1:${tempPort}`);
-        const result = await new Promise((resolve) => {
-            const req = http.get('http://cp.cloudflare.com/generate_204', { agent, timeout: 5000 }, (res) => {
-                const latency = Date.now() - start; if (res.statusCode === 204) resolve({ success: true, latency }); else resolve({ success: false, msg: `HTTP ${res.statusCode}` });
-            });
-            req.on('error', () => resolve({ success: false, msg: "Err" })); req.on('timeout', () => { req.destroy(); resolve({ success: false, msg: "Timeout" }); });
+        console.log(`[Test-Proxy] Starting xray on port ${tempPort} for proxy test`);
+
+        const xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], {
+            cwd: BIN_DIR,
+            env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN },
+            stdio: 'ignore',
+            windowsHide: true
         });
-        await forceKill(xrayProcess.pid); try { fs.unlinkSync(tempConfigPath); } catch (e) { } return result;
-    } catch (err) { return { success: false, msg: err.message }; }
+
+        // 增加等待时间，确保xray完全启动
+        await new Promise(r => setTimeout(r, 1500));
+
+        const start = Date.now();
+        const agent = new SocksProxyAgent(`socks5://127.0.0.1:${tempPort}`);
+
+        const result = await new Promise((resolve) => {
+            const req = http.get('http://cp.cloudflare.com/generate_204', {
+                agent,
+                timeout: 10000 // 增加到10秒
+            }, (res) => {
+                const latency = Date.now() - start;
+                console.log(`[Test-Proxy] Response status: ${res.statusCode}, latency: ${latency}ms`);
+
+                if (res.statusCode === 204) {
+                    resolve({ success: true, latency });
+                } else {
+                    resolve({ success: false, msg: `HTTP ${res.statusCode}` });
+                }
+            });
+
+            req.on('error', (err) => {
+                console.error('[Test-Proxy] Request error:', err.message);
+                resolve({ success: false, msg: err.code || "Network Error" });
+            });
+
+            req.on('timeout', () => {
+                console.warn('[Test-Proxy] Request timeout');
+                req.destroy();
+                resolve({ success: false, msg: "Timeout" });
+            });
+        });
+
+        // 清理
+        await forceKill(xrayProcess.pid);
+        try {
+            fs.unlinkSync(tempConfigPath);
+            fs.unlinkSync(tempLogPath);
+        } catch (e) {
+            // 忽略删除错误
+        }
+
+        return result;
+    } catch (err) {
+        console.error('[Test-Proxy] Unexpected error:', err);
+        return { success: false, msg: err.message };
+    }
 });
 ipcMain.handle('set-title-bar-color', (e, colors) => { const win = BrowserWindow.fromWebContents(e.sender); if (win) { if (process.platform === 'win32') try { win.setTitleBarOverlay({ color: colors.bg, symbolColor: colors.symbol }); } catch (e) { } win.setBackgroundColor(colors.bg); } });
 ipcMain.handle('check-app-update', async () => { try { const data = await fetchJson('https://api.github.com/repos/EchoHS/GeekezBrowser/releases/latest'); if (!data || !data.tag_name) return { update: false }; const remote = data.tag_name.replace('v', ''); if (compareVersions(remote, app.getVersion()) > 0) { return { update: true, remote, url: data.html_url }; } return { update: false }; } catch (e) { return { update: false, error: e.message }; } });
