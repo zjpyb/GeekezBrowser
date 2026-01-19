@@ -8,6 +8,8 @@ window.zhCN = {
     editFingerprint: "编辑指纹环境",
     profileName: "环境名称",
     proxyLink: "代理链接",
+    proxyLinkOptional: "代理链接（可选，留空为直连）",
+    profileNameRequired: "环境名称不能为空！",
     preProxySetting: "前置代理",
     optDefault: "跟随全局",
     optOn: "强制开启",
@@ -28,7 +30,8 @@ window.zhCN = {
     qsOn: "前置: 开启",
     qsOff: "前置: 关闭",
     confirmDel: "确定要删除该环境吗？",
-    inputReq: "请填写环境名称和代理链接！",
+    inputReq: "环境名称不能为空！", // 保留向后兼容
+    profileNameRequired: "环境名称不能为空！",
     runningStatus: "运行中",
     done: "完成",
     remark: "备注",

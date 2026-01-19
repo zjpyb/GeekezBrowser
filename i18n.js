@@ -8,6 +8,8 @@ const enTranslations = {
     editFingerprint: "Edit Profile",
     profileName: "Profile Name",
     proxyLink: "Proxy Link",
+    proxyLinkOptional: "Proxy Link (Optional, leave empty for direct connection)",
+    profileNameRequired: "Profile name is required!",
     preProxySetting: "Pre-Proxy",
     optDefault: "Global",
     optOn: "Force ON",
@@ -28,7 +30,8 @@ const enTranslations = {
     qsOn: "Pre: ON",
     qsOff: "Pre: OFF",
     confirmDel: "Delete this profile?",
-    inputReq: "Name & Proxy Link required!",
+    inputReq: "Profile name is required!", // 保留向后兼容
+    profileNameRequired: "Profile name is required!",
     runningStatus: "RUNNING",
     done: "Done",
     remark: "Remark",

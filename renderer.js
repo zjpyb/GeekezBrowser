@@ -634,8 +634,11 @@ async function saveNewProfile() {
 
     const tags = tagsStr.split(/[,，]/).map(s => s.trim()).filter(s => s);
 
+    // 如果有代理链接且没有名称，尝试从代理链接提取名称
     if (!name && proxyStr) { const autoName = getProxyRemark(proxyStr); if (autoName) name = autoName; }
-    if (!name || !proxyStr) return showAlert(t('inputReq'));
+
+    // 只验证名称必填，代理链接可以为空
+    if (!name) return showAlert(t('profileNameRequired') || 'Profile name is required!');
 
     // 传递 timezone, city, geolocation, language, browserType
     const profileData = {
